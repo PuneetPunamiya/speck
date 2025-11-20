@@ -18,7 +18,9 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -35,7 +37,6 @@ type SnowflakeAccountReconciler struct {
 
 // +kubebuilder:rbac:groups=operator.dataverse.redhat.com,resources=snowflakeaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.dataverse.redhat.com,resources=snowflakeaccounts/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=operator.dataverse.redhat.com,resources=snowflakeaccounts/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -47,10 +48,44 @@ type SnowflakeAccountReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.22.4/pkg/reconcile
 func (r *SnowflakeAccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
-	// TODO(user): your logic here
+	// Fetch the SnowflakeAccount instance
+	snowflakeAccount := &operatorv1alpha1.SnowflakeAccount{}
+	err := r.Get(ctx, req.NamespacedName, snowflakeAccount)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			log.Info("SnowflakeAccount resource not found. Ignoring since object must be deleted")
+			return ctrl.Result{}, nil
+		}
+		log.Error(err, "Failed to get SnowflakeAccount")
+		return ctrl.Result{}, err
+	}
 
+	// Check if the account has already been created
+	if snowflakeAccount.Status.AccountCreated {
+		log.Info("Snowflake account already created", "accountURL", snowflakeAccount.Status.AccountURL)
+		return ctrl.Result{}, nil
+	}
+
+	// Create the Snowflake account
+	log.Info("Creating Snowflake account")
+	accountName, err := r.createSnowflakeAccount(ctx, snowflakeAccount)
+	if err != nil {
+		log.Error(err, "Failed to create Snowflake account")
+		snowflakeAccount.Status.Message = fmt.Sprintf("Failed to create account: %v", err)
+		if statusErr := r.Status().Update(ctx, snowflakeAccount); statusErr != nil {
+			log.Error(statusErr, "Failed to update status")
+		}
+		return ctrl.Result{}, err
+	}
+
+	// Update status to indicate successful creation
+	if err := r.updateStatusAfterCreation(ctx, snowflakeAccount, accountName); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	log.Info("Successfully created Snowflake account", "accountName", accountName)
 	return ctrl.Result{}, nil
 }
 

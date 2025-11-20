@@ -65,6 +65,28 @@ spec:
           - --health-probe-bind-address=:8081
         image: controller:latest
         name: manager
+        env:
+        - name: SNOWFLAKE_ORG_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: snowflake-org-credentials
+              key: SNOWFLAKE_ORG_USERNAME
+        - name: SNOWFLAKE_ORG_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: snowflake-org-credentials
+              key: SNOWFLAKE_ORG_PASSWORD
+        - name: SNOWFLAKE_ORG_ACCOUNT
+          valueFrom:
+            secretKeyRef:
+              name: snowflake-org-credentials
+              key: SNOWFLAKE_ORG_ACCOUNT
+        - name: SNOWFLAKE_ORG_ROLE
+          valueFrom:
+            secretKeyRef:
+              name: snowflake-org-credentials
+              key: SNOWFLAKE_ORG_ROLE
+              optional: true
         ports: []
         securityContext:
           readOnlyRootFilesystem: true

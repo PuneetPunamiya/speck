@@ -29,10 +29,6 @@ type SnowflakeAccountSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
-
-	// foo is an example field of SnowflakeAccount. Edit snowflakeaccount_types.go to remove/update
-	// +optional
-	Foo *string `json:"foo,omitempty"`
 }
 
 // SnowflakeAccountStatus defines the observed state of SnowflakeAccount.
@@ -56,10 +52,25 @@ type SnowflakeAccountStatus struct {
 	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// AccountCreated indicates whether the Snowflake account has been created
+	// +optional
+	AccountCreated bool `json:"accountCreated,omitempty"`
+
+	// AccountURL is the URL of the created Snowflake account
+	// +optional
+	AccountURL string `json:"accountURL,omitempty"`
+
+	// Message provides additional information about the current state
+	// +optional
+	Message string `json:"message,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Created",type="boolean",JSONPath=".status.accountCreated",description="Whether the account has been created"
+// +kubebuilder:printcolumn:name="URL",type="string",JSONPath=".status.accountURL",description="The URL of the created account"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // SnowflakeAccount is the Schema for the snowflakeaccounts API
 type SnowflakeAccount struct {

@@ -14,7 +14,19 @@ spec:
     singular: snowflakeaccount
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - description: Whether the account has been created
+      jsonPath: .status.accountCreated
+      name: Created
+      type: boolean
+    - description: The URL of the created account
+      jsonPath: .status.accountURL
+      name: URL
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: SnowflakeAccount is the Schema for the snowflakeaccounts API
@@ -38,15 +50,17 @@ spec:
             type: object
           spec:
             description: spec defines the desired state of SnowflakeAccount
-            properties:
-              foo:
-                description: foo is an example field of SnowflakeAccount. Edit snowflakeaccount_types.go
-                  to remove/update
-                type: string
             type: object
           status:
             description: status defines the observed state of SnowflakeAccount
             properties:
+              accountCreated:
+                description: AccountCreated indicates whether the Snowflake account
+                  has been created
+                type: boolean
+              accountURL:
+                description: AccountURL is the URL of the created Snowflake account
+                type: string
               conditions:
                 description: |-
                   conditions represent the current state of the SnowflakeAccount resource.
@@ -116,6 +130,10 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              message:
+                description: Message provides additional information about the current
+                  state
+                type: string
             type: object
         required:
         - spec
