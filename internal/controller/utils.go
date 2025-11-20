@@ -85,3 +85,25 @@ func shuffleString(s string) string {
 
 	return string(runes)
 }
+
+// extractAccountNameFromURL extracts the account name from a Snowflake account URL
+// Expected format: https://{accountName}.snowflakecomputing.com
+func extractAccountNameFromURL(url string) string {
+	if url == "" {
+		return ""
+	}
+
+	// Remove https:// prefix if present
+	if len(url) > 8 && url[:8] == "https://" {
+		url = url[8:]
+	}
+
+	// Find the first dot to extract the account name
+	for i, ch := range url {
+		if ch == '.' {
+			return url[:i]
+		}
+	}
+
+	return ""
+}

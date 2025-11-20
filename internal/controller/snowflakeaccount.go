@@ -12,6 +12,7 @@ import (
 	_ "github.com/snowflakedb/gosnowflake"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -225,4 +226,93 @@ func (r *SnowflakeAccountReconciler) createCredentialsSecret(ctx context.Context
 // boolPtr returns a pointer to a bool value
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+// deleteSnowflakeAccount deletes a Snowflake account using the DROP ACCOUNT command
+// Returns any error encountered during deletion
+func (r *SnowflakeAccountReconciler) deleteSnowflakeAccount(ctx context.Context, account *operatorv1alpha1.SnowflakeAccount) error {
+	log := logf.FromContext(ctx)
+
+	// Extract the account name from the status or from the secret
+	accountName := extractAccountNameFromURL(account.Status.AccountURL)
+	if accountName == "" {
+		// Try to get it from the secret
+		accountName, err := r.getAccountNameFromSecret(ctx, account)
+		if err != nil {
+			log.Error(err, "Failed to get account name from secret")
+			log.Info("No account name found, skipping deletion")
+			return nil
+		}
+		if accountName == "" {
+			log.Info("No account name found in status or secret, skipping deletion")
+			return nil
+		}
+	}
+
+	// Get Snowflake organization credentials from environment variables
+	creds, err := getSnowflakeCredentialsFromEnv()
+	if err != nil {
+		return err
+	}
+
+	log.Info("Deleting Snowflake account",
+		"accountName", accountName,
+		"orgAccount", creds.account,
+		"orgRole", creds.role)
+
+	// Connect to Snowflake
+	db, err := connectToSnowflake(creds)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	// Set a timeout for the operation
+	deleteCtx, cancel := context.WithTimeout(ctx, 120*time.Second)
+	defer cancel()
+
+	// Build DROP ACCOUNT SQL with IF EXISTS and GRACE_PERIOD_IN_DAYS
+	// Using 3 days grace period by default
+	dropAccountSQL := fmt.Sprintf(`DROP ACCOUNT IF EXISTS %s GRACE_PERIOD_IN_DAYS = 3`, accountName)
+
+	log.Info("Executing DROP ACCOUNT", "sql", dropAccountSQL)
+
+	// Execute the DROP ACCOUNT statement
+	_, err = db.ExecContext(deleteCtx, dropAccountSQL)
+	if err != nil {
+		return fmt.Errorf("failed to execute DROP ACCOUNT: %w", err)
+	}
+
+	log.Info("Successfully executed DROP ACCOUNT", "accountName", accountName)
+	return nil
+}
+
+// getAccountNameFromSecret retrieves the account name from the credentials secret
+func (r *SnowflakeAccountReconciler) getAccountNameFromSecret(ctx context.Context, account *operatorv1alpha1.SnowflakeAccount) (string, error) {
+	log := logf.FromContext(ctx)
+
+	// List secrets in the namespace with our label
+	secretList := &corev1.SecretList{}
+	listOpts := []client.ListOption{
+		client.InNamespace(account.Namespace),
+		client.MatchingLabels{
+			"app.kubernetes.io/instance": account.Name,
+		},
+	}
+
+	if err := r.List(ctx, secretList, listOpts...); err != nil {
+		return "", fmt.Errorf("failed to list secrets: %w", err)
+	}
+
+	if len(secretList.Items) == 0 {
+		log.Info("No credential secret found for account")
+		return "", nil
+	}
+
+	// Get the account name from the first matching secret
+	secret := secretList.Items[0]
+	accountName := string(secret.Data["accountName"])
+
+	log.Info("Found account name from secret", "secretName", secret.Name, "accountName", accountName)
+	return accountName, nil
 }

@@ -37,6 +37,7 @@ type SnowflakeAccountReconciler struct {
 
 // +kubebuilder:rbac:groups=operator.dataverse.redhat.com,resources=snowflakeaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.dataverse.redhat.com,resources=snowflakeaccounts/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=operator.dataverse.redhat.com,resources=snowflakeaccounts/finalizers,verbs=update
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -61,6 +62,12 @@ func (r *SnowflakeAccountReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 		log.Error(err, "Failed to get SnowflakeAccount")
 		return ctrl.Result{}, err
+	}
+
+	// Handle finalizer operations (deletion, adding/removing finalizers)
+	continueReconciliation, result, err := r.handleFinalizerOperations(ctx, snowflakeAccount)
+	if !continueReconciliation {
+		return result, err
 	}
 
 	// Check if the account has already been created

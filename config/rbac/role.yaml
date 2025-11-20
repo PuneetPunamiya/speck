@@ -31,6 +31,12 @@ rules:
 - apiGroups:
   - operator.dataverse.redhat.com
   resources:
+  - snowflakeaccounts/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - operator.dataverse.redhat.com
+  resources:
   - snowflakeaccounts/status
   verbs:
   - get
