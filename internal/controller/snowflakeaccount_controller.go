@@ -37,6 +37,7 @@ type SnowflakeAccountReconciler struct {
 
 // +kubebuilder:rbac:groups=operator.dataverse.redhat.com,resources=snowflakeaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.dataverse.redhat.com,resources=snowflakeaccounts/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -70,7 +71,7 @@ func (r *SnowflakeAccountReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Create the Snowflake account
 	log.Info("Creating Snowflake account")
-	accountName, err := r.createSnowflakeAccount(ctx, snowflakeAccount)
+	accountDetails, err := r.createSnowflakeAccount(ctx, snowflakeAccount)
 	if err != nil {
 		log.Error(err, "Failed to create Snowflake account")
 		snowflakeAccount.Status.Message = fmt.Sprintf("Failed to create account: %v", err)
@@ -80,12 +81,22 @@ func (r *SnowflakeAccountReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	// Update status to indicate successful creation
-	if err := r.updateStatusAfterCreation(ctx, snowflakeAccount, accountName); err != nil {
+	// Create a secret to store the credentials
+	if err := r.createCredentialsSecret(ctx, snowflakeAccount, accountDetails); err != nil {
+		log.Error(err, "Failed to create credentials secret")
+		snowflakeAccount.Status.Message = fmt.Sprintf("Account created but failed to store credentials: %v", err)
+		if statusErr := r.Status().Update(ctx, snowflakeAccount); statusErr != nil {
+			log.Error(statusErr, "Failed to update status")
+		}
 		return ctrl.Result{}, err
 	}
 
-	log.Info("Successfully created Snowflake account", "accountName", accountName)
+	// Update status to indicate successful creation
+	if err := r.updateStatusAfterCreation(ctx, snowflakeAccount, accountDetails); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	log.Info("Successfully created Snowflake account and stored credentials", "accountName", accountDetails.accountName)
 	return ctrl.Result{}, nil
 }
 

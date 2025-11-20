@@ -11,12 +11,12 @@ import (
 )
 
 // updateStatusAfterCreation updates the SnowflakeAccount status after successful account creation
-func (r *SnowflakeAccountReconciler) updateStatusAfterCreation(ctx context.Context, snowflakeAccount *operatorv1alpha1.SnowflakeAccount, accountName string) error {
+func (r *SnowflakeAccountReconciler) updateStatusAfterCreation(ctx context.Context, snowflakeAccount *operatorv1alpha1.SnowflakeAccount, details *accountDetails) error {
 	log := logf.FromContext(ctx)
 
 	// Update status fields
 	snowflakeAccount.Status.AccountCreated = true
-	snowflakeAccount.Status.AccountURL = fmt.Sprintf("https://%s.snowflakecomputing.com", accountName)
+	snowflakeAccount.Status.AccountURL = fmt.Sprintf("https://%s.snowflakecomputing.com", details.accountName)
 	snowflakeAccount.Status.Message = "Snowflake account created successfully"
 
 	// Persist the status update

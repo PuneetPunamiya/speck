@@ -5,10 +5,13 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	operatorv1alpha1 "github.com/redhat-data-and-ai/speck/api/v1alpha1"
 	_ "github.com/snowflakedb/gosnowflake"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -18,6 +21,16 @@ type snowflakeCredentials struct {
 	password string
 	account  string
 	role     string
+}
+
+// accountDetails holds the details of a created Snowflake account
+type accountDetails struct {
+	accountName   string
+	adminName     string
+	adminPassword string
+	email         string
+	region        string
+	edition       string
 }
 
 // getSnowflakeCredentialsFromEnv fetches and validates organization credentials from environment variables
@@ -72,14 +85,14 @@ func connectToSnowflake(creds *snowflakeCredentials) (*sql.DB, error) {
 }
 
 // createSnowflakeAccount creates a new Snowflake account
-// Returns the generated account name and any error
-func (r *SnowflakeAccountReconciler) createSnowflakeAccount(ctx context.Context, account *operatorv1alpha1.SnowflakeAccount) (string, error) {
+// Returns the account details and any error
+func (r *SnowflakeAccountReconciler) createSnowflakeAccount(ctx context.Context, account *operatorv1alpha1.SnowflakeAccount) (*accountDetails, error) {
 	log := logf.FromContext(ctx)
 
 	// Get Snowflake credentials from environment variables
 	creds, err := getSnowflakeCredentialsFromEnv()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	// Generate all account details
@@ -93,25 +106,18 @@ func (r *SnowflakeAccountReconciler) createSnowflakeAccount(ctx context.Context,
 	edition := "ENTERPRISE"
 	comment := "Created by Kubernetes Operator"
 
-	// Log all generated credentials for reference
-	log.Info("Creating Snowflake account with generated credentials",
+	// Log account creation (without sensitive credentials)
+	log.Info("Creating Snowflake account",
 		"accountName", accountName,
-		"adminName", adminName,
-		"adminPassword", adminPassword,
-		"firstName", firstName,
-		"lastName", lastName,
-		"email", email,
 		"region", region,
 		"edition", edition,
-		"orgAccount", creds.account,
-		"orgRole", creds.role,
 		"resourceName", account.Name,
 		"namespace", account.Namespace)
 
 	// Connect to Snowflake
 	db, err := connectToSnowflake(creds)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer db.Close()
 
@@ -148,9 +154,75 @@ func (r *SnowflakeAccountReconciler) createSnowflakeAccount(ctx context.Context,
 	// Execute the CREATE ACCOUNT statement
 	_, err = db.ExecContext(createCtx, createAccountSQL)
 	if err != nil {
-		return "", fmt.Errorf("failed to execute CREATE ACCOUNT: %w", err)
+		return nil, fmt.Errorf("failed to execute CREATE ACCOUNT: %w", err)
 	}
 
 	log.Info("Snowflake account created successfully", "accountName", accountName)
-	return accountName, nil
+
+	// Return account details for secret creation
+	return &accountDetails{
+		accountName:   accountName,
+		adminName:     adminName,
+		adminPassword: adminPassword,
+		email:         email,
+		region:        region,
+		edition:       edition,
+	}, nil
+}
+
+// createCredentialsSecret creates a Kubernetes Secret to store the Snowflake account credentials
+func (r *SnowflakeAccountReconciler) createCredentialsSecret(ctx context.Context, account *operatorv1alpha1.SnowflakeAccount, details *accountDetails) error {
+	log := logf.FromContext(ctx)
+
+	// Create secret name: {accountName}-creds (lowercase for Kubernetes naming requirements)
+	secretName := fmt.Sprintf("%s-creds", strings.ToLower(details.accountName))
+
+	// Prepare secret data
+	secretData := map[string][]byte{
+		"accountName":   []byte(details.accountName),
+		"adminName":     []byte(details.adminName),
+		"adminPassword": []byte(details.adminPassword),
+		"email":         []byte(details.email),
+		"region":        []byte(details.region),
+		"edition":       []byte(details.edition),
+		"accountURL":    []byte(fmt.Sprintf("https://%s.snowflakecomputing.com", details.accountName)),
+	}
+
+	// Create the Secret object
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: account.Namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/name":       "snowflake-account",
+				"app.kubernetes.io/managed-by": "snowflake-operator",
+				"app.kubernetes.io/instance":   account.Name,
+			},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: account.APIVersion,
+					Kind:       account.Kind,
+					Name:       account.Name,
+					UID:        account.UID,
+					Controller: boolPtr(true),
+				},
+			},
+		},
+		Type: corev1.SecretTypeOpaque,
+		Data: secretData,
+	}
+
+	// Create the secret in the cluster
+	if err := r.Create(ctx, secret); err != nil {
+		log.Error(err, "Failed to create credentials secret", "secretName", secretName)
+		return fmt.Errorf("failed to create secret: %w", err)
+	}
+
+	log.Info("Successfully created credentials secret", "secretName", secretName, "namespace", account.Namespace)
+	return nil
+}
+
+// boolPtr returns a pointer to a bool value
+func boolPtr(b bool) *bool {
+	return &b
 }
