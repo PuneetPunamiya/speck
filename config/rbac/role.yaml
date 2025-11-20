@@ -1,0 +1,32 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - operator.dataverse.redhat.com
+  resources:
+  - snowflakeaccounts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - operator.dataverse.redhat.com
+  resources:
+  - snowflakeaccounts/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - operator.dataverse.redhat.com
+  resources:
+  - snowflakeaccounts/status
+  verbs:
+  - get
+  - patch
+  - update
