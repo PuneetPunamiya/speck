@@ -5,8 +5,10 @@ import (
 	"crypto/rand"
 	"fmt"
 	"math/big"
+	"time"
 
 	operatorv1alpha1 "github.com/redhat-data-and-ai/speck/api/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -18,6 +20,8 @@ func (r *SnowflakeAccountReconciler) updateStatusAfterCreation(ctx context.Conte
 	snowflakeAccount.Status.AccountCreated = true
 	snowflakeAccount.Status.AccountURL = fmt.Sprintf("https://%s.snowflakecomputing.com", details.accountName)
 	snowflakeAccount.Status.Message = "Snowflake account created successfully"
+	now := metav1.Now()
+	snowflakeAccount.Status.CreationTime = &now
 
 	// Persist the status update
 	if err := r.Status().Update(ctx, snowflakeAccount); err != nil {
@@ -106,4 +110,54 @@ func extractAccountNameFromURL(url string) string {
 	}
 
 	return ""
+}
+
+// checkDuration checks if the account has exceeded its duration and should be deleted
+// Returns (shouldDelete, requeueAfter)
+func (r *SnowflakeAccountReconciler) checkDuration(ctx context.Context, snowflakeAccount *operatorv1alpha1.SnowflakeAccount) (bool, time.Duration) {
+	log := logf.FromContext(ctx)
+
+	// If no creation time is set, don't delete
+	if snowflakeAccount.Status.CreationTime == nil {
+		log.Info("No creation time set, skipping duration check")
+		return false, 0
+	}
+
+	// Parse the duration from spec (default to 2 minutes)
+	durationStr := snowflakeAccount.Spec.Duration
+	if durationStr == "" {
+		durationStr = "2m"
+	}
+
+	duration, err := time.ParseDuration(durationStr)
+	if err != nil {
+		log.Error(err, "Failed to parse duration, using default 2m", "duration", durationStr)
+		duration = 2 * time.Minute
+	}
+
+	// Calculate when the account should be deleted
+	creationTime := snowflakeAccount.Status.CreationTime.Time
+	expirationTime := creationTime.Add(duration)
+	currentTime := r.Clock.Now()
+
+	// Check if duration has expired
+	if currentTime.After(expirationTime) {
+		log.Info("Duration has expired",
+			"creationTime", creationTime,
+			"expirationTime", expirationTime,
+			"currentTime", currentTime,
+			"duration", duration)
+		return true, 0
+	}
+
+	// Calculate how long until expiration
+	timeUntilExpiration := expirationTime.Sub(currentTime)
+	log.Info("Duration not yet expired",
+		"creationTime", creationTime,
+		"expirationTime", expirationTime,
+		"currentTime", currentTime,
+		"timeUntilExpiration", timeUntilExpiration)
+
+	// Return false but suggest requeue time
+	return false, timeUntilExpiration
 }

@@ -22,6 +22,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/clock"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -33,6 +34,7 @@ import (
 type SnowflakeAccountReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+	Clock  clock.PassiveClock
 }
 
 // +kubebuilder:rbac:groups=operator.dataverse.redhat.com,resources=snowflakeaccounts,verbs=get;list;watch;create;update;patch;delete
@@ -72,7 +74,26 @@ func (r *SnowflakeAccountReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Check if the account has already been created
 	if snowflakeAccount.Status.AccountCreated {
-		log.Info("Snowflake account already created", "accountURL", snowflakeAccount.Status.AccountURL)
+		log.Info("Snowflake account already created")
+
+		// Check if duration has expired
+		if shouldDeleteDueToDuration, requeueAfter := r.checkDuration(ctx, snowflakeAccount); shouldDeleteDueToDuration {
+			log.Info("Duration expired, deleting Snowflake account")
+
+			// Delete the Kubernetes resource - the finalizer will handle Snowflake account cleanup
+			if err := r.Delete(ctx, snowflakeAccount); err != nil {
+				log.Error(err, "Failed to delete SnowflakeAccount resource due to duration expiration")
+				return ctrl.Result{}, err
+			}
+
+			log.Info("Triggered deletion of Snowflake account due to duration expiration")
+			return ctrl.Result{}, nil
+		} else if requeueAfter > 0 {
+			// Requeue to check duration again
+			log.Info("Requeuing to check duration", "after", requeueAfter)
+			return ctrl.Result{RequeueAfter: requeueAfter}, nil
+		}
+
 		return ctrl.Result{}, nil
 	}
 

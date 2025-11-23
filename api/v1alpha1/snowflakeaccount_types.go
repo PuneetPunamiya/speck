@@ -29,6 +29,13 @@ type SnowflakeAccountSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
+
+	// Duration is the duration after which the account will be automatically deleted
+	// Format: duration string (e.g., "2m", "1h30m")
+	// Default: "2m" (2 minutes)
+	// +optional
+	// +kubebuilder:default="2m"
+	Duration string `json:"duration,omitempty"`
 }
 
 // SnowflakeAccountStatus defines the observed state of SnowflakeAccount.
@@ -64,6 +71,11 @@ type SnowflakeAccountStatus struct {
 	// Message provides additional information about the current state
 	// +optional
 	Message string `json:"message,omitempty"`
+
+	// CreationTime is the timestamp when the Snowflake account was created
+	// This is used to track duration for automatic deletion
+	// +optional
+	CreationTime *metav1.Time `json:"creationTime,omitempty"`
 }
 
 // +kubebuilder:object:root=true
