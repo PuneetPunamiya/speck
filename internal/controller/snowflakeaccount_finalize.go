@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	operatorv1alpha1 "github.com/redhat-data-and-ai/speck/api/v1alpha1"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -15,11 +14,11 @@ const (
 	snowflakeAccountFinalizer = "operator.dataverse.redhat.com/finalizer"
 )
 
-func (r *SnowflakeAccountReconciler) handleFinalizerOperations(ctx context.Context, snowflakeAccount *operatorv1alpha1.SnowflakeAccount) (continueReconciliation bool, result ctrl.Result, err error) {
+func (r *SnowflakeAccountReconciler) handleFinalizerOperations(ctx context.Context, snowflakeAccount *operatorv1alpha1.SnowflakeAccount) (continueReconciliation bool, err error) {
 	log := logf.FromContext(ctx)
 
 	// Check if the SnowflakeAccount is being deleted
-	if !snowflakeAccount.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !snowflakeAccount.DeletionTimestamp.IsZero() {
 		// The object is being deleted
 		if controllerutil.ContainsFinalizer(snowflakeAccount, snowflakeAccountFinalizer) {
 			log.Info("Running finalizer logic for SnowflakeAccount")
@@ -27,18 +26,18 @@ func (r *SnowflakeAccountReconciler) handleFinalizerOperations(ctx context.Conte
 			// Perform cleanup operations
 			if err := r.finalizeSnowflakeAccount(ctx, snowflakeAccount); err != nil {
 				log.Error(err, "Failed to finalize SnowflakeAccount")
-				return false, ctrl.Result{}, err
+				return false, err
 			}
 
 			// Remove the finalizer
 			controllerutil.RemoveFinalizer(snowflakeAccount, snowflakeAccountFinalizer)
 			if err := r.Update(ctx, snowflakeAccount); err != nil {
 				log.Error(err, "Failed to remove finalizer")
-				return false, ctrl.Result{}, err
+				return false, err
 			}
 			log.Info("Successfully finalized SnowflakeAccount")
 		}
-		return false, ctrl.Result{}, nil
+		return false, nil
 	}
 
 	// Add finalizer if it doesn't exist
@@ -47,13 +46,13 @@ func (r *SnowflakeAccountReconciler) handleFinalizerOperations(ctx context.Conte
 		controllerutil.AddFinalizer(snowflakeAccount, snowflakeAccountFinalizer)
 		if err := r.Update(ctx, snowflakeAccount); err != nil {
 			log.Error(err, "Failed to add finalizer")
-			return false, ctrl.Result{}, err
+			return false, err
 		}
-		return false, ctrl.Result{}, nil
+		return false, nil
 	}
 
 	// Continue with normal reconciliation
-	return true, ctrl.Result{}, nil
+	return true, nil
 }
 
 // finalizeSnowflakeAccount performs cleanup operations before the SnowflakeAccount is deleted

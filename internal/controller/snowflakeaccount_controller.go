@@ -67,9 +67,9 @@ func (r *SnowflakeAccountReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	// Handle finalizer operations (deletion, adding/removing finalizers)
-	continueReconciliation, result, err := r.handleFinalizerOperations(ctx, snowflakeAccount)
+	continueReconciliation, err := r.handleFinalizerOperations(ctx, snowflakeAccount)
 	if !continueReconciliation {
-		return result, err
+		return ctrl.Result{}, err
 	}
 
 	// Check if the account has already been created

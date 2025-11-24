@@ -120,7 +120,11 @@ func (r *SnowflakeAccountReconciler) createSnowflakeAccount(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
+	defer func() {
+		if closeErr := db.Close(); closeErr != nil {
+			log.Error(closeErr, "Failed to close database connection")
+		}
+	}()
 
 	// Set a timeout for the operation
 	createCtx, cancel := context.WithTimeout(ctx, 120*time.Second)
@@ -265,7 +269,11 @@ func (r *SnowflakeAccountReconciler) deleteSnowflakeAccount(ctx context.Context,
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() {
+		if closeErr := db.Close(); closeErr != nil {
+			log.Error(closeErr, "Failed to close database connection")
+		}
+	}()
 
 	// Set a timeout for the operation
 	deleteCtx, cancel := context.WithTimeout(ctx, 120*time.Second)
