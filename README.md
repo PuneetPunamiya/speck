@@ -1,8 +1,17 @@
-# speck
-// TODO(user): Add simple overview of use/purpose
+# Speck - Snowflake Ephemeral Account Operator
+
+A Kubernetes operator that manages ephemeral Snowflake trial accounts with automatic lifecycle management.
 
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+
+Speck is a Kubernetes operator that automates the creation and management of temporary Snowflake trial accounts. Built using the Kubebuilder framework, it provides a declarative way to provision Snowflake accounts for testing, development, or demo purposes with automatic cleanup after a specified duration.
+
+**Key Features:**
+- **Automated Account Provisioning**: Create Snowflake trial accounts through Kubernetes custom resources
+- **Time-based Lifecycle Management**: Automatically delete accounts after a configurable duration (default: 2 minutes)
+- **Credential Management**: Securely store account credentials in Kubernetes secrets
+- **Declarative Configuration**: Define account requirements using familiar Kubernetes manifests
+- **Clean Resource Cleanup**: Properly handles finalizers to ensure Snowflake accounts are deleted when the Kubernetes resource is removed
 
 ## Getting Started
 
